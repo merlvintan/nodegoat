@@ -41,3 +41,67 @@ function BenefitsDAO(db) {
 }
 
 module.exports = { BenefitsDAO };
+
+
+const {
+    BenefitsDAO
+} = require("../data/benefits-dao");
+const {
+    environmentalScripts
+} = require("../../config/config");
+
+function BenefitsHandler(db) {
+    "use strict";
+
+    const benefitsDAO = new BenefitsDAO(db);
+
+    this.displayBenefits = (req, res, next) => {
+
+        benefitsDAO.getAllNonAdminUsers((error, users) => {
+
+            if (error) return next(error);
+
+            return res.render("benefits", {
+                users,
+                user: {
+                    isAdmin: true
+                },
+                environmentalScripts
+            });
+        });
+    };
+
+    this.updateBenefits = (req, res, next) => {
+        const {
+            userId,
+            benefitStartDate
+        } = req.body;
+
+        // Authorization check: only allow if logged-in user matches userId or is admin
+        if (parseInt(req.session.userId) !== parseInt(userId) && !req.session.isAdmin) {
+            return res.status(403).send('Unauthorized to update benefits for this user');
+        }
+
+        benefitsDAO.updateBenefits(userId, benefitStartDate, (error) => {
+
+            if (error) return next(error);
+
+            benefitsDAO.getAllNonAdminUsers((error, users) => {
+                if (error) return next(error);
+
+                const data = {
+                    users,
+                    user: {
+                        isAdmin: true
+                    },
+                    updateSuccess: true,
+                    environmentalScripts
+                };
+
+                return res.render("benefits", data);
+            });
+        });
+    };
+}
+
+module.exports = BenefitsHandler;
