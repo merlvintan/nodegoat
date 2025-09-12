@@ -1,52 +1,29 @@
 name: Smoke test GHCR image
-
-on:
-  workflow_dispatch: {}   # run manually from Actions
-
-permissions:
-  contents: read
-  packages: read          # needed to pull from GHCR
-
+on: { workflow_dispatch: {} }
+permissions: { contents: read, packages: read }
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Login to GHCR
-        uses: docker/login-action@v3
+      - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Pull the image
-        run: docker pull ghcr.io/antegulin/nodegoat:play-latest
-
-      - name: Start MongoDB
-        run: |
-          docker network create demo
-          docker run -d --name mongo --network demo mongo:7
-
-      - name: Wait for Mongo
-        run: |
+      - run: docker pull ghcr.io/antegulin/nodegoat:sha-0d46dd7
+      - run: docker network create demo
+      - run: docker run -d --name mongo --network demo mongo:7
+      - run: |
           for i in {1..30}; do
             docker exec mongo mongosh --quiet --eval "db.runCommand({ ping: 1 }).ok" | grep -q 1 && break
-            echo "Waiting for Mongo..."; sleep 2
+            sleep 2
           done
-
-      - name: Run your app
-        run: |
+      - run: |
           docker run -d --name app --network demo -p 4000:4000 \
             -e MONGODB_URI="mongodb://mongo:27017/nodegoat" \
-            ghcr.io/antegulin/nodegoat:play-latest
-
-      - name: Hit homepage
-        run: |
-          for i in {1..30}; do
-            curl -fsS http://localhost:4000/ && exit 0
-            echo "Waiting for app..."; sleep 2
-          done
-          exit 1
-
-      - name: Show app logs
-        if: always()
+            ghcr.io/antegulin/nodegoat:sha-0d46dd7
+      - run: |
+          for i in {1..30}; do curl -fsS http://localhost:4000/ && exit 0; sleep 2; done
+          echo "App did not respond" && exit 1
+      - if: always()
         run: docker logs --tail=200 app || true
