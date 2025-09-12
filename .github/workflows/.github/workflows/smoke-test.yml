@@ -1,0 +1,52 @@
+name: Smoke test image (GHCR)
+
+on:
+  workflow_dispatch:        # run it manually from the Actions tab
+  push:
+    branches: [ "play" ]    # or run on every push to play
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Start MongoDB
+        run: |
+          docker network create demo
+          docker run -d --name mongo --network demo mongo:7
+
+      - name: Wait for Mongo
+        run: |
+          until docker exec mongo mongosh --quiet --eval "db.runCommand({ ping: 1 }).ok" | grep -q 1; do
+            echo "Waiting for Mongo..."; sleep 2;
+          done
+
+      - name: Run NodeGoat container
+        run: |
+          docker run -d --name nodegoat --network demo -p 4000:4000 \
+            -e MONGODB_URI="mongodb://mongo:27017/nodegoat" \
+            ghcr.io/antegulin/nodegoat:play-latest
+
+      - name: Wait for app & hit homepage
+        run: |
+          for i in {1..30}; do
+            curl -fsS http://localhost:4000/ && exit 0
+            echo "Waiting for app..."; sleep 2
+          done
+          echo "App did not respond" && exit 1
+
+      - name: Show last logs (for the interview)
+        if: always()
+        run: |
+          echo "==== nodegoat logs ===="
+          docker logs --tail=100 nodegoat || true
