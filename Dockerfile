@@ -1,18 +1,26 @@
-FROM node:12-alpine
-ENV WORKDIR /usr/src/app/
-WORKDIR $WORKDIR
-COPY package*.json $WORKDIR
-RUN npm install --production --no-cache
+# syntax=docker/dockerfile:1
 
-FROM node:12-alpine
-ENV USER node
-ENV WORKDIR /home/$USER/app
-WORKDIR $WORKDIR
-COPY --from=0 /usr/src/app/node_modules node_modules
-RUN chown $USER:$USER $WORKDIR
-COPY --chown=node . $WORKDIR
-# In production environment uncomment the next line
-#RUN chown -R $USER:$USER /home/$USER && chmod -R g-s,o-rx /home/$USER && chmod -R o-wrx $WORKDIR
-# Then all further actions including running the containers should be done under non-root user.
-USER $USER
+# Build + prod runtime in one (simple app, no separate build step)
+FROM node:20-alpine AS runtime
+WORKDIR /app
+
+# App runs on 4000 (NodeGoat default)
+ENV NODE_ENV=production
+ENV PORT=4000
+# Safe default for local/docker-compose; override in CI/Prod
+ENV MONGODB_URI="mongodb://mongo:27017/nodegoat"
+
+# Install only the deps needed to run
+COPY package*.json ./
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --omit=dev || npm install --production
+
+# Copy source
+COPY . .
+
+# Drop privileges (built-in non-root user in the base image)
+USER node
+
 EXPOSE 4000
+# NodeGoat uses npm start -> server.js
+CMD ["npm","start"]
