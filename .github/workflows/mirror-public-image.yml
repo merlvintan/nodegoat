@@ -1,0 +1,35 @@
+name: Mirror a public image into my Docker Hub repo
+
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "Public image to copy (e.g. docker.io/library/nginx:1.25)"
+        required: true
+        default: "docker.io/library/nginx:1.25"
+      target_tag:
+        description: "Tag to use in antegulin365/aikido-repo"
+        required: true
+        default: "nginx-1.25"
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    permissions: { contents: read }
+    steps:
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Pull the public source image
+        run: docker pull "${{ inputs.source }}"
+
+      - name: Retag into my repo
+        run: |
+          docker tag "${{ inputs.source }}" \
+            "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/aikido-repo:${{ inputs.target_tag }}"
+
+      - name: Push to my Docker Hub repo
+        run: docker push "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/aikido-repo:${{ inputs.target_tag }}"
